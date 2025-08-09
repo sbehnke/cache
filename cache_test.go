@@ -3,8 +3,6 @@ package cache
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -702,27 +700,24 @@ func TestCacheSaveLoadIOEmpty(t *testing.T) {
 // Test Persistence (file-based methods)
 func TestCachePersistence(t *testing.T) {
 	cache := NewCache()
-	filePath := filepath.Join("testdata", "test_cache.json")
-
-	// Clean up
-	defer os.Remove(filePath)
 
 	// Set up test data
 	cache.Set("key1", "value1", 5*time.Second)
 	cache.Set("key2", 42, 5*time.Second)
 	cache.Set("key3", []string{"a", "b", "c"}, 5*time.Second)
 
-	// Save to file
-	err := cache.SaveToFile(filePath)
+	// Save to buffer
+	var buf bytes.Buffer
+	err := cache.SaveTo(&buf)
 	if err != nil {
-		t.Fatalf("SaveToFile failed: %v", err)
+		t.Fatalf("SaveTo failed: %v", err)
 	}
 
 	// Create new cache and load from file
 	newCache := NewCache()
-	err = newCache.LoadFromFile(filePath)
+	err = newCache.LoadFrom(&buf)
 	if err != nil {
-		t.Fatalf("LoadFromFile failed: %v", err)
+		t.Fatalf("LoadFrom failed: %v", err)
 	}
 
 	// Verify loaded data
