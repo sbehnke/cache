@@ -4,6 +4,7 @@ package cache
 import (
 	"container/list"
 	"encoding/json"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -497,8 +498,8 @@ func (c *Cache) Keys() []string {
 	return keys
 }
 
-// SaveToFile saves cache contents to a JSON file
-func (c *Cache) SaveToFile(filename string) error {
+// SaveTo writes cache contents to an io.Writer in JSON format
+func (c *Cache) SaveTo(writer io.Writer) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -517,23 +518,27 @@ func (c *Cache) SaveToFile(filename string) error {
 		}
 	}
 
-	data, err := json.MarshalIndent(items, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(filename, data, 0o644)
+	encoder := json.NewEncoder(writer)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(items)
 }
 
-// LoadFromFile loads cache contents from a JSON file
-func (c *Cache) LoadFromFile(filename string) error {
-	data, err := os.ReadFile(filename)
+// SaveToFile saves cache contents to a JSON file
+func (c *Cache) SaveToFile(filename string) error {
+	file, err := os.Create(filename)
 	if err != nil {
 		return err
 	}
+	defer file.Close()
 
+	return c.SaveTo(file)
+}
+
+// LoadFrom reads cache contents from an io.Reader in JSON format
+func (c *Cache) LoadFrom(reader io.Reader) error {
 	var items []SerializableItem
-	if err := json.Unmarshal(data, &items); err != nil {
+	decoder := json.NewDecoder(reader)
+	if err := decoder.Decode(&items); err != nil {
 		return err
 	}
 
@@ -546,6 +551,17 @@ func (c *Cache) LoadFromFile(filename string) error {
 	}
 
 	return nil
+}
+
+// LoadFromFile loads cache contents from a JSON file
+func (c *Cache) LoadFromFile(filename string) error {
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	return c.LoadFrom(file)
 }
 
 // Export returns all cache contents as a map

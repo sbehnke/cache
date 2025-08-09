@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -570,7 +571,135 @@ func TestCacheKeys(t *testing.T) {
 	}
 }
 
-// Test Persistence
+// Test SaveTo/LoadFrom with io.Writer/Reader
+func TestCacheSaveLoadIO(t *testing.T) {
+	cache := NewCache()
+
+	// Set up test data
+	cache.Set("key1", "value1", 5*time.Second)
+	cache.Set("key2", 42, 5*time.Second)
+	cache.Set("key3", []string{"a", "b", "c"}, 5*time.Second)
+
+	// Set namespaced data using proper namespace interface
+	userNS := cache.Namespace("namespace1")
+	userNS.Set("nskey1", "nsvalue1", 10*time.Second)
+
+	// Save to buffer
+	var buf bytes.Buffer
+	err := cache.SaveTo(&buf)
+	if err != nil {
+		t.Fatalf("SaveTo failed: %v", err)
+	}
+
+	// Verify JSON content is not empty
+	if buf.Len() == 0 {
+		t.Fatal("SaveTo produced empty output")
+	}
+
+	// Create new cache and load from buffer
+	newCache := NewCache()
+	err = newCache.LoadFrom(&buf)
+	if err != nil {
+		t.Fatalf("LoadFrom failed: %v", err)
+	}
+
+	// Verify loaded data
+	value1, found1 := newCache.Get("key1")
+	value2, found2 := newCache.Get("key2")
+	_, found3 := newCache.Get("key3")
+
+	// Get namespaced data using proper namespace interface
+	newUserNS := newCache.Namespace("namespace1")
+	nsValue1, foundNs1 := newUserNS.Get("nskey1")
+
+	if !found1 || value1 != "value1" {
+		t.Error("key1 not loaded correctly")
+	}
+	if !found2 || value2 != float64(42) { // JSON unmarshaling converts numbers to float64
+		t.Errorf("key2 not loaded correctly, got %v (%T)", value2, value2)
+	}
+	if !found3 {
+		t.Error("key3 not found after loading")
+	}
+	if !foundNs1 || nsValue1 != "nsvalue1" {
+		t.Errorf("namespaced key not loaded correctly, got %v, found: %v", nsValue1, foundNs1)
+	}
+}
+
+// Test SaveTo/LoadFrom with expired items
+func TestCacheSaveLoadIOExpiredItems(t *testing.T) {
+	cache := NewCache()
+
+	// Set up test data with very short TTL
+	cache.Set("expired", "value", 1*time.Millisecond)
+	cache.Set("valid", "value", 5*time.Second)
+
+	// Wait for expiration
+	time.Sleep(5 * time.Millisecond)
+
+	// Save to buffer
+	var buf bytes.Buffer
+	err := cache.SaveTo(&buf)
+	if err != nil {
+		t.Fatalf("SaveTo failed: %v", err)
+	}
+
+	// Create new cache and load from buffer
+	newCache := NewCache()
+	err = newCache.LoadFrom(&buf)
+	if err != nil {
+		t.Fatalf("LoadFrom failed: %v", err)
+	}
+
+	// Verify expired item was not saved/loaded
+	_, foundExpired := newCache.Get("expired")
+	_, foundValid := newCache.Get("valid")
+
+	if foundExpired {
+		t.Error("expired item should not have been saved/loaded")
+	}
+	if !foundValid {
+		t.Error("valid item should have been saved/loaded")
+	}
+}
+
+// Test LoadFrom with invalid JSON
+func TestCacheLoadFromInvalidJSON(t *testing.T) {
+	cache := NewCache()
+
+	invalidJSON := strings.NewReader("invalid json content")
+	err := cache.LoadFrom(invalidJSON)
+
+	if err == nil {
+		t.Error("LoadFrom should fail with invalid JSON")
+	}
+}
+
+// Test SaveTo/LoadFrom empty cache
+func TestCacheSaveLoadIOEmpty(t *testing.T) {
+	cache := NewCache()
+
+	// Save empty cache
+	var buf bytes.Buffer
+	err := cache.SaveTo(&buf)
+	if err != nil {
+		t.Fatalf("SaveTo failed: %v", err)
+	}
+
+	// Load into new cache
+	newCache := NewCache()
+	err = newCache.LoadFrom(&buf)
+	if err != nil {
+		t.Fatalf("LoadFrom failed: %v", err)
+	}
+
+	// Verify cache is still empty
+	if newCache.ItemCount() != 0 {
+		t.Errorf("Expected empty cache, got %d items", newCache.ItemCount())
+	}
+}
+
+// Test Persistence (file-based methods)
 func TestCachePersistence(t *testing.T) {
 	cache := NewCache()
 	filePath := filepath.Join("testdata", "test_cache.json")
