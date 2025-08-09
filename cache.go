@@ -4,6 +4,7 @@ package cache
 import (
 	"container/list"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -620,9 +621,7 @@ func (c *Cache) Refresh(key string) bool {
 func (c *Cache) ForEach(fn func(key string, value any, expiration time.Time) bool) {
 	c.mu.RLock()
 	snapshot := make(map[string]*cacheItem)
-	for k, v := range c.store {
-		snapshot[k] = v
-	}
+	maps.Copy(snapshot, c.store)
 	c.mu.RUnlock()
 
 	now := time.Now()

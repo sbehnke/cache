@@ -927,12 +927,12 @@ func TestConcurrentAccessNewFeatures(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Test concurrent namespace operations
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
 			ns := cache.Namespace(fmt.Sprintf("ns_%d", id))
-			for j := 0; j < numOperations; j++ {
+			for j := range numOperations {
 				key := fmt.Sprintf("key_%d", j)
 				value := fmt.Sprintf("value_%d_%d", id, j)
 				ns.Set(key, value, 5*time.Second)
@@ -941,11 +941,11 @@ func TestConcurrentAccessNewFeatures(t *testing.T) {
 	}
 
 	// Test concurrent pattern operations
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			for j := 0; j < numOperations; j++ {
+			for range numOperations {
 				pattern := fmt.Sprintf("ns_%d:*", id%3)
 				cache.GetByPattern(pattern)
 			}
@@ -1011,8 +1011,7 @@ func BenchmarkCacheNamespace(b *testing.B) {
 	cache := NewCache()
 	ns := cache.Namespace("bench")
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		key := fmt.Sprintf("key_%d", i)
 		ns.Set(key, "benchmark_value", 5*time.Second)
 	}
@@ -1022,13 +1021,12 @@ func BenchmarkCacheGetByPattern(b *testing.B) {
 	cache := NewCache()
 
 	// Pre-populate cache
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		key := fmt.Sprintf("user_%d", i)
 		cache.Set(key, "benchmark_value", 5*time.Second)
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		cache.GetByPattern("user_*")
 	}
 }
@@ -1037,12 +1035,11 @@ func BenchmarkCacheBatchOperations(b *testing.B) {
 	cache := NewCache()
 
 	items := make(map[string]any)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		items[fmt.Sprintf("key_%d", i)] = fmt.Sprintf("value_%d", i)
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		cache.SetMultiple(items, 5*time.Second)
 	}
 }
@@ -1050,8 +1047,7 @@ func BenchmarkCacheBatchOperations(b *testing.B) {
 func BenchmarkCacheMemoryTracking(b *testing.B) {
 	cache := NewCache()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for i := 0; b.Loop(); i++ {
 		key := fmt.Sprintf("key_%d", i)
 		value := strings.Repeat("x", 100)
 		cache.Set(key, value, 5*time.Second)
